@@ -1,0 +1,26 @@
+Note to Professor:
+
+I initially planned to work on forecasting water usage trends by comparing urban and agricultural sectors. However, after reviewing the available data, I found that the USGS water usage dataset only extends up to the year 2015. This limitation restricted my ability to perform accurate forecasting on recent trends.
+
+As a result, I decided to continue with exploratory data analysis (EDA) on the water usage data up to 2015, and shifted the forecasting portion of the project to focus on climate data. I used climate data from PRISM (1985–2024), which allowed me to conduct detailed EDA and generate forecasts for key climate variables such as temperature, precipitation, dew point, and vapor pressure deficit for the state of Michigan.
+
+---
+
+Order of files to review:
+
+1. `Water_Use_Data_Extraction.Rmd` – Used to extract water usage data from pre-downloaded data.
+2. `Extract_Prism_Data.R` – Used to extract climate data from the PRISM API.
+3. `Prism_Data_Combine.R` – Combines all `.bill` files downloaded from PRISM into one dataset.
+4. `FinalData_Extraction.Rmd` – Merges climate and water usage data for combined analysis.
+5. `Water_Use_EDA.Rmd` – Exploratory data analysis on water usage data.
+6. `PRISM_Climate_Exploration_1985_2024.Rmd` – EDA on PRISM climate data.
+7. `Michigan Climate Forecast.ipynb` – Jupyter Notebook for forecasting Michigan’s climate using Prophet.
+
+All `.Rmd` files are included along with their respective knitted `.html` outputs for easier viewing.
+
+Please note: I have **not included the raw PRISM `.bil` files** extracted by `Extract_Prism_Data.R`, as the full dataset is nearly **12GB** in size. However, the final processed data and all scripts required to reproduce the analysis are included.
+
+Thank you for your understanding.
+
+– Uttara Bammireddy  
+MIS 5470, Winter 2025

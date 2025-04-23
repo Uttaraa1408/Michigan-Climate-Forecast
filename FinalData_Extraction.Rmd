@@ -1,0 +1,162 @@
+---
+title: "Final Data Prep: Pivot, Aggregate and Merge"
+author: "Uttara Bammireddy"
+date: "2025-04-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+``` {r libraries}
+
+# Load required libraries
+library(dplyr)
+library(tidyr)
+library(readr)
+
+```
+
+
+``` {r load_data}
+
+# Load Water Use Data 
+water_data <- read_csv("D:\\Winter 2025\\MIS 5470 PCDA\\Final_Project\\Data\\clean_USA_Water_Usage.csv", show_col_types = FALSE)
+
+head(water_data)
+
+
+# Load PRISM Climate Data
+prism_data <- read_csv("D:\\Winter 2025\\MIS 5470 PCDA\\Final_Project\\Data\\PRISM_Climate_By_State.csv", show_col_types = FALSE)
+
+head(prism_data)
+
+```
+
+
+``` {r pivot_prism}
+
+# Pivot PRISM Data: one row per state-year-month, columns for each variable
+prism_wide <- prism_data %>%
+  pivot_wider(names_from = variable, values_from = mean_value)
+
+prism_wide <- prism_wide %>% filter(year >= 1985 & year <= 2015)
+
+head(prism_wide)
+
+```
+
+``` {r aggregation}
+
+# Aggregate to match 5-year water use periods
+prism_final <- prism_wide %>%
+  mutate(year = as.integer(year),
+         month = as.integer(month)) %>%
+  # Group to 5-year bins: 1985, 1990, 1995...
+  mutate(Year = case_when(
+    year >= 1983 & year <= 1987 ~ 1985,
+    year >= 1988 & year <= 1992 ~ 1990,
+    year >= 1993 & year <= 1997 ~ 1995,
+    year >= 1998 & year <= 2002 ~ 2000,
+    year >= 2003 & year <= 2007 ~ 2005,
+    year >= 2008 & year <= 2012 ~ 2010,
+    year >= 2013 & year <= 2017 ~ 2015,
+    TRUE ~ NA_integer_
+  )) %>%
+  filter(!is.na(Year)) %>%
+  group_by(Year) %>%
+summarise(
+  across(c(tmin, tmax, tmean, tdmean, vpdmin, vpdmax, ppt), \(x) mean(x, na.rm = TRUE)),
+  .groups = "drop"
+)
+
+
+head(prism_final)
+
+```
+
+``` {r transpose_water_use_data}
+
+# Transpose
+# exclude first column (category names)
+water_transposed <- as.data.frame(t(water_data[,-1]))
+
+# set new column names from first column
+colnames(water_transposed) <- water_data[[1]]
+
+#Adding Year as new column
+water_transposed$Year <- rownames(water_transposed)
+
+water_clean <- water_transposed %>%
+  mutate(across(-Year, as.numeric)) %>%
+  mutate(Year = as.numeric(Year)) %>%
+  relocate(Year)
+
+print(head(water_clean))
+```
+``` {r clean_water_use}
+
+# Keep Selected Columns
+
+selected_cols <- c(
+  "Year",
+  "Population, in millions",
+  "Public supply, in Bgal/d",
+  "Self-supplied domestic, in Bgal/d",
+  "Commercial, in Bgal/d",
+  "Self-supplied industrial, in Bgal/d",
+  "Thermoelectric power, in Bgal/d",
+  "Irrigation, in Bgal/d",
+  "Livestock, in Bgal/d",
+  "Aquaculture, in Bgal/d"
+)
+
+cleaned_water_use <- water_clean %>% select(all_of(selected_cols))
+
+# Aggregating columns
+water_use_final <- cleaned_water_use %>%
+  mutate(
+    total_agricultural = `Irrigation, in Bgal/d` + 
+      `Livestock, in Bgal/d` + coalesce(`Aquaculture, in Bgal/d`, 0),
+    
+    total_urban = `Public supply, in Bgal/d` + 
+      `Self-supplied domestic, in Bgal/d` + coalesce(`Commercial, in Bgal/d`,0) +
+      `Self-supplied industrial, in Bgal/d` + `Thermoelectric power, in Bgal/d`,
+  )
+
+
+print(head(water_use_final))
+
+```
+
+``` {r merge}
+
+#Merge Water_use_final and Prism_final data
+final_merged <- left_join(water_use_final, prism_final, by = "Year") %>%
+  mutate(across(everything(), ~replace_na(.x, 0)))
+
+final_merged <- final_merged %>% filter(Year >= 1985)
+
+print(head(final_merged))
+
+```
+
+``` {r export}
+
+# Define the output file path
+output_file <- "D:/Winter 2025/MIS 5470 PCDA/Final_Project/Data/Final_Data.csv"
+
+# Check if the file already exists
+if (file.exists(output_file)) {
+  # If exists, delete it
+  file.remove(output_file)
+  cat("Existing file found. It has been deleted.\n")
+}
+
+# Write the cleaned data to the CSV file
+write.csv(final_merged, file = output_file, row.names = FALSE)
+
+cat("Cleaned data has been saved to: ", output_file, "\n")
+
+```

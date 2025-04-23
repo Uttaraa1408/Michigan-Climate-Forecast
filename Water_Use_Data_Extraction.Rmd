@@ -1,0 +1,93 @@
+---
+title: "Water Use Data Cleansing"
+author: "Uttara Bammireddy"
+date: "2025-04-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+``` {r libraries}
+
+# Load required libraries
+library(dplyr)
+library(readr)
+library(stringr)
+
+```
+
+``` {r load_data}
+
+# Manually input the file path from the Pre_downloaded_date folder under US
+input_file <- file.choose()  # This allows us to manually select the file
+
+raw_data <- read.table(input_file, sep = "\t", fill = TRUE)
+
+# Print the data to check the structure
+print(raw_data)
+
+```
+``` {r data_clean}
+
+# Removing Content-Type row
+cleaned_data <- raw_data[!grepl("^Content-type|^#", raw_data$V1) & nchar(raw_data$V1) > 0, ]
+
+# Extract the header (first row)
+header <- cleaned_data[1, ]
+
+# New column names
+colnames(cleaned_data) <- header
+
+# Removing the header and the scaling row from the data
+cleaned_data <- cleaned_data[-c(1, 2), ]
+
+print(cleaned_data)
+
+```
+
+
+``` {r replace_NA}
+
+# Replacing 'b', 'c', 'a' with NA
+cleaned_data[] <- lapply(cleaned_data, 
+                         function(x) {
+                           if (is.character(x)) 
+                             {x[x %in% c("b", "c", "a")] <- NA}
+                           return(x)}
+                         )
+
+print(cleaned_data)
+```
+
+``` {r to_numeric}
+
+# Converting  all columns except the first one to numeric
+
+cleaned_data <- cleaned_data %>%
+  mutate(across(-1, ~ as.numeric(str_replace_all(., "[^0-9.-]", ""))))
+
+print(cleaned_data)
+
+```
+
+``` {r export}
+
+
+# Define the output file path
+output_file <- "D:/Winter 2025/MIS 5470 PCDA/Final_Project/Data/clean_USA_Water_Usage.csv"
+
+# Check if the file already exists
+if (file.exists(output_file)) {
+  # If exists, delete it
+  file.remove(output_file)
+  cat("Existing file found. It has been deleted.\n")
+}
+
+# Writing the cleaned data to the CSV file
+write.csv(cleaned_data, file = output_file, row.names = FALSE)
+
+cat("Cleaned data has been saved to: ", output_file, "\n")
+
+```

@@ -1,0 +1,199 @@
+---
+title: "Water Use Data EDA"
+author: "Uttara Bammireddy"
+date: "2025-04-15"
+output: html_document
+---
+
+> The final water use dataset provides a comprehensive view of national water consumption trends in the United States from 1985 to 2015, captured at 5-year intervals. It includes total urban and agricultural water usage, population figures, and key climate indicators such as precipitation, temperature, and vapor pressure deficit. By combining human and environmental factors, this dataset enables a comparative analysis of how urban development and agricultural demands have evolved alongside changing climate conditions.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+``` {r libraries}
+
+# Load Required Packages
+library(dplyr)       # Data manipulation
+library(ggplot2)     # Plotting
+library(tidyr)       # Reshaping data
+library(readr)       # Reading files
+library(corrr)       # Correlation analysis
+library(scales)      # Custom axis formatting
+
+```
+
+
+``` {r load_data}
+
+# Load Final Data
+final_data <- read_csv("D:/Winter 2025/MIS 5470 PCDA/Final_Project/Data/Final_Data.csv", show_col_types = FALSE)
+
+head(final_data)
+
+```
+
+
+
+``` {r summary}
+
+#View structure and column names
+glimpse(final_data)
+
+# Check for missing values
+colSums(is.na(final_data))
+
+# Summary statistics
+summary(final_data)
+
+```
+# Urban vs Agricultural Water Use Over Time
+``` {r line_plot}
+
+ggplot(final_data, aes(x = Year)) +
+  geom_line(aes(y = total_urban, color = "Urban"), linewidth = 1.5) +
+  geom_line(aes(y = total_agricultural, color = "Agricultural"), linewidth = 1.5) +
+  labs(
+    title = "Urban vs Agricultural Water Use (1985 - 2015)",
+    x = "Year",
+    y = "Water Use (Bgal/day)",
+    color = "Type"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+> The line graph illustrates the trends in urban and agricultural water use in the United States from 1985 to 2015. Urban water use remained consistently higher than agricultural use throughout the period. After a steady rise from 1985 to 2005, urban water use declined sharply between 2005 and 2015. In contrast, agricultural water use remained relatively stable, with minor fluctuations and a slight overall decline. This suggests a shift in urban water consumption patterns, possibly due to conservation efforts, technological advancements, or changes in population density and infrastructure.
+
+``` {r precipitation_line}
+
+ggplot(final_data, aes(x = factor(Year), y = ppt)) +
+  geom_col(fill = "#488A99", color = "#488A99", width = 0.7) +
+  labs(
+    title = "Average Precipitation Over Time (1985–2015)",
+    x = "Year",
+    y = "Precipitation (mm)"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+> The bar chart shows the average precipitation in the U.S. from 1985 to 2015 at 5-year intervals. Overall, precipitation has shown a gradual increase over time, with a slight dip around the year 2000. Starting from approximately 75 mm in 1985, the average rose steadily and peaked around 86 mm by 2015. This upward trend may reflect changing climate patterns, potentially impacting both agricultural practices and water resource planning.
+
+``` {r mean_temp}
+
+ggplot(final_data, aes(x = Year, y = tmean)) +
+  geom_line(color = "#DBAE58", linewidth = 1.5) +
+  geom_point(color = "#AC3E31") +
+  labs(
+    title = "Mean Temperature Over Time (1985 - 2015)",
+    x = "Year",
+    y = "Temperature (°C)"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+> The line chart displays the trend in mean temperature across the United States from 1985 to 2015 in 5-year intervals. While the temperature remained relatively stable between 1985 and 1990, there was a notable dip in 1995, reaching the lowest point in the observed period. However, this was followed by a sharp increase, peaking around the year 2000. After 2000, mean temperatures gradually declined, ending slightly lower in 2015 than the earlier peak. These fluctuations highlight the variability in climate conditions over time and may have influenced water demand and usage patterns in both urban and agricultural sectors.
+
+``` {r per_capita}
+
+library(dplyr)
+
+# Calculate per capita water use (in gallons/person/day)
+per_capita_table <- final_data %>%
+  mutate(
+    # Apply scaling: data is in multiples of 16
+    per_capita_agri = (total_agricultural * 16 * 1e6) / (`Population, in millions` * 1e6),
+    per_capita_urban = (total_urban * 16 * 1e6) / (`Population, in millions` * 1e6)
+  ) %>%
+  # Select relevant columns
+  select(
+    Year,
+    per_capita_agri,
+    per_capita_urban
+  ) %>%
+  mutate(
+    per_capita_agri = round(per_capita_agri, 2),
+    per_capita_urban = round(per_capita_urban, 2)
+  )
+
+# Final table
+print(per_capita_table)
+
+```
+
+> The per capita water use data from 1985 to 2015 reveals a clear downward trend in both agricultural and urban sectors. Agricultural water use per person dropped from 9.21 gallons/day in 1985 to 6.28 gallons/day in 2015, while urban use saw a steeper decline from 16.76 to 9.36 gallons/day over the same period. This steady decrease, despite a growing population, suggests improvements in water efficiency, conservation efforts, and possibly technological advancements in both sectors. The data highlights a positive shift toward more sustainable water management practices in the United States.
+
+``` {r facet_wrap}
+
+pie_data <- final_data %>%
+  mutate(
+    agri_share = (total_agricultural / (total_agricultural + total_urban)) * 100,
+    urban_share = (total_urban / (total_agricultural + total_urban)) * 100
+  ) %>%
+  select(Year, agri_share, urban_share) %>%
+  pivot_longer(cols = c(agri_share, urban_share),
+               names_to = "Type",
+               values_to = "Share")
+
+# Faceted pie charts
+ggplot(pie_data, aes(x = "", y = Share, fill = Type)) +
+  geom_col(width = 1, color = "white") +
+  coord_polar(theta = "y") +
+  facet_wrap(~ Year) +
+  scale_fill_manual(
+    values = c(
+      "agri_share" = "#AC3E31",   # Agricultural - dark red
+      "urban_share" = "#DBAE58"  # Urban - golden yellow
+    ),
+    labels = c("Agricultural", "Urban")
+  ) +
+  labs(
+    title = "Urban vs Agricultural Water Use Share (1985–2015)",
+    fill = "Sector"
+  ) +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+
+> The pie charts illustrate the proportion of water use between the agricultural and urban sectors in the U.S. from 1985 to 2015. Across all years, urban water use consistently accounts for a larger share of total water consumption. However, the difference between the two sectors remains fairly stable over time, with urban usage typically occupying around two-thirds of the total and agriculture around one-third. This persistent dominance of urban water use suggests a sustained demand driven by residential, industrial, and commercial activities, while agricultural usage remains significant but relatively steady despite advancements in irrigation efficiency.
+
+
+``` {r grouped_bar}
+
+bar_data <- final_data %>%
+  select(`Population, in millions`, total_agricultural, total_urban, Year) %>%
+  pivot_longer(cols = c(total_agricultural, total_urban),
+               names_to = "Sector",
+               values_to = "WaterUse")
+
+# Grouped bar plot
+ggplot(bar_data, aes(x = factor(`Population, in millions`), y = WaterUse, fill = Sector)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(
+    values = c("total_agricultural" = "#AC3E31", "total_urban" = "#DBAE58"),
+    labels = c("Agricultural", "Urban")
+  ) +
+  labs(
+    title = "Urban vs Agricultural Water Use by Population",
+    x = "Population (in millions)",
+    y = "Water Use (Bgal/d)",
+    fill = "Sector"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+> The bar chart illustrates the relationship between population growth and sectoral water use (urban vs agricultural) in the U.S. from 1985 to 2015. Despite a steady increase in population, urban water use initially rises but starts to decline after peaking around 2005, suggesting a shift toward improved water efficiency or changing consumption patterns in urban areas. In contrast, agricultural water use remains relatively stable throughout the period, with only minor fluctuations. This indicates that while population continues to grow, total water use especially in the urban sector is not increasing proportionally, reflecting possible gains in water conservation and technology-driven efficiency.

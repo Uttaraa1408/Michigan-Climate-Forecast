@@ -1,0 +1,457 @@
+---
+title: "Climate Evolution Across U.S. States: A 40-Year Analysis Using PRISM Data (1985 - 2024)"
+author: "Uttara Bammireddy"
+date: "2025-04-18"
+output: html_document
+---
+
+## About the Data
+
+> This dataset comprises monthly state-level climate data from the PRISM Climate Group, spanning the years 1985 to 2024 and covering all 50 U.S. states, the District of Columbia, and select U.S. territories (56 regions in total). It includes key climate variables such as mean temperature (tmean), precipitation (ppt), and vapor pressure deficits (vpdmax, vpdmin).
+
+``` {r libraries}
+
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(corrplot)
+library(forecast)
+library(usmap)
+library(viridis)
+library(dplyr)
+
+```
+
+``` {r load_data}
+
+prism_data <- read_csv("D:/Winter 2025/MIS 5470 PCDA/Final_Project/Data/PRISM_Climate_By_State.csv", show_col_types = FALSE)
+
+print(head(prism_data))
+
+```
+
+``` {r states_no_data}
+
+#Identify states that have non-NA value
+valid_states <- prism_data %>%
+  filter(!is.na(mean_value)) %>%
+  distinct(state) %>%
+  pull(state)
+
+print(valid_states)
+
+#Keep only those states in the dataset
+prism_data <- prism_data %>%
+  filter(state %in% valid_states)
+
+
+```
+
+## Let's transpose the data for further EDA
+``` {r transpose}
+
+prism_wide <- prism_data %>%
+  filter(!is.na(mean_value)) %>%
+  pivot_wider(
+    names_from = variable,
+    values_from = mean_value
+  )
+
+print(head(prism_wide))
+
+```
+
+## Let's add Region Groups based on state
+``` {r region_groups}
+
+northeast <- c("Connecticut", "Maine", "Massachusetts", "New Hampshire", "Rhode Island", "Vermont",
+               "New Jersey", "New York", "Pennsylvania")
+
+midwest <- c("Indiana", "Illinois", "Michigan", "Ohio", "Wisconsin",
+             "Iowa", "Kansas", "Minnesota", "Missouri", "Nebraska", "North Dakota", "South Dakota")
+
+south <- c("Delaware", "Florida", "Georgia", "Maryland", "North Carolina", "South Carolina", "Virginia",
+           "District of Columbia", "West Virginia", "Alabama", "Kentucky", "Mississippi", "Tennessee",
+           "Arkansas", "Louisiana", "Oklahoma", "Texas")
+
+west <- c("Arizona", "Colorado", "Idaho", "Montana", "Nevada", "New Mexico", "Utah", "Wyoming",
+          "Alaska", "California", "Hawaii", "Oregon", "Washington")
+
+prism_wide <- prism_wide %>%
+  mutate(region = case_when(
+    state %in% northeast ~ "Northeast",
+    state %in% midwest ~ "Midwest",
+    state %in% south ~ "South",
+    state %in% west ~ "West",
+    TRUE ~ NA_character_
+  ))
+
+print(head(prism_wide))
+
+```
+
+
+``` {r NA_Region}
+
+sum(is.na(prism_wide$region))
+
+```
+
+## Let's add Seasons
+``` {r seasons}
+
+prism_wide <- prism_wide %>%
+  mutate(season = case_when(
+    month %in% c(12, 1, 2) ~ "Winter",
+    month %in% c(3, 4, 5) ~ "Spring",
+    month %in% c(6, 7, 8) ~ "Summer",
+    month %in% c(9, 10, 11) ~ "Fall"
+  ))
+
+print(head(prism_wide))
+```
+
+
+``` {r basic_info}
+
+# View structure of the dataset
+glimpse(prism_wide)
+
+# Summary statistics
+summary(prism_wide)
+
+# Check for missing values
+colSums(is.na(prism_wide))
+
+```
+
+
+
+``` {r facet_wrap}
+
+# Tmean trend per state (faceted)
+prism_data %>%
+  filter(variable == "tmean") %>%
+  group_by(state, year) %>%
+  summarize(avg_temp = mean(mean_value, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = year, y = avg_temp)) +
+  geom_line(color = "#AC3E31") +
+  facet_wrap(~ state, scales = "free_y") +
+  labs(title = "Mean Temperature Trends (1985 - 2024) by State",
+       x = "Year", y = "Mean Temperature (°C)") +
+ theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+> The plot displays mean annual temperature trends from 1985 to 2024 across all U.S. states. Despite natural fluctuations, most states show a gradual upward trend in temperature, reflecting the broader impacts of climate change. Southern states like Florida, Texas, and Louisiana exhibit consistently higher temperatures, while northern states such as Minnesota, Montana, and Maine maintain lower average temperatures throughout the years. This visualization highlights both regional temperature differences and a nationwide warming pattern that has become more pronounced in recent decades.
+
+
+``` {r us_map}
+
+state_avg_temp <- prism_wide %>%
+  group_by(state) %>%
+  summarize(avg_temp = mean(tmean, na.rm = TRUE))
+  
+  plot_usmap(data = state_avg_temp, values = "avg_temp", regions = "states") +
+  scale_fill_viridis(name = "Avg Temp (°C)", option = "C") +
+  labs(title = "Average Temperature by State (1985 - 2024)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+```
+
+> The map shows the average temperatures across U.S. states from 1985 to 2024, highlighting a clear north–south gradient. Southern states like Florida, Texas, and Louisiana experienced the highest average temperatures, often above 20°C, while northern states such as Minnesota, North Dakota, and Maine remained significantly cooler, averaging below 10°C. Central states like Missouri and Kentucky fall in the mid-range. This pattern reflects the influence of latitude and regional climate, with warmer conditions dominating the South and cooler climates persisting in the North.
+
+``` {r seasonal_region_temp}
+
+# Seasonal Temperature Trends Faceted by Region
+prism_wide %>%
+  group_by(region, year, season) %>%
+  summarize(seasonal_temp = mean(tmean, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = year, y = seasonal_temp)) +
+  geom_line(color = "#DBAE58", size = 1.1) +
+  facet_wrap(~ region + season, scales = "free_y") +
+  labs(title = "Seasonal Mean Temperature Trends by Region (1985 - 2024)",
+       x = "Year", y = "Mean Temperature (°C)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+
+> The plot shows seasonal mean temperature trends from 1985 to 2024 across the four U.S. regions - Midwest, Northeast, South, and West. All regions exhibit a consistent warming trend across all four seasons, with the Winter and Spring seasons showing some of the most notable increases in temperature, especially in the Midwest and Northeast. The South remains the warmest region overall, with summer temperatures averaging above 26°C. Meanwhile, Western winters, though mild in comparison to the Northeast or Midwest, also show a gradual upward shift.
+
+
+``` {r seasonal_region_ppt}
+
+# Seasonal Precipitation Trends Faceted by Region
+prism_wide %>%
+  group_by(region, year, season) %>%
+  summarize(seasonal_ppt = mean(ppt, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = year, y = seasonal_ppt)) +
+  geom_line(color = "#488A99", size = 1.1) +
+  facet_wrap(~ region + season, scales = "free_y") +
+  labs(title = "Seasonal Mean Precipitation Trends by Region (1985 - 2024)",
+       x = "Year", y = "Mean Precipitation (mm)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+
+> The plot displays seasonal total precipitation trends from 1985 to 2024 across the four U.S. regions — Midwest, Northeast, South, and West. The overall trend suggests that while precipitation varies considerably year to year, several regions, particularly the Northeast and Midwest, show a gradual increase in Spring and Fall precipitation. The South consistently receives the highest precipitation totals across all seasons, especially during Spring and Summer, although it also shows greater variability. The West, known for being drier, has comparatively lower precipitation levels, but with some signs of seasonal spikes, particularly in Winter. Overall, the trends highlight increasing variability and slight upward shifts in seasonal rainfall in several regions.
+
+
+``` {r seasonal_region_vdpmax}
+
+# Seasonal VDP Trends Faceted by Region
+
+prism_wide %>%
+  group_by(region, year, season) %>%
+  summarize(
+    vpd_max = mean(vpdmax, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = year, y = vpd_max)) +
+  geom_line(color = "#484848", size = 1.1) +
+  facet_wrap(~ region + season, scales = "free_y") +
+  labs(title = "Seasonal Mean VPDmax Trends by Region (1985 - 2024)",
+       x = "Year", y = "Vapor Pressure Deficit (kPa)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+> The plot displays seasonal mean vpdmax (maximum vapor pressure deficit) trends from 1985 to 2024 across all U.S. regions — Midwest, Northeast, South, and West. Across all regions and seasons, vpdmax values generally show a gradual upward trend, indicating that daytime air dryness is increasing. This is especially noticeable in the Midwest and Northeast during Spring and Summer, where recent years reflect a steady rise in vpdmax, suggesting intensifying evaporative demand. The South and West regions exhibit the highest vpdmax values, particularly in summer, often exceeding 30–35 kPa, which aligns with their typically hotter and drier climates. However, even in winter, all regions show modest increases, signaling seasonally consistent drying trends. Overall, the chart highlights a widening seasonal impact of dry air conditions — a key concern for agriculture, forestry, and water management. The persistent increase in vpdmax across regions and seasons suggests that plants and ecosystems may face greater water stress, especially during growing seasons.
+
+## For the next phase of this analysis, I have chosen to focus on Michigan.
+
+``` {r michigan}
+
+michigan_data <- prism_wide %>%
+  filter(state == "Michigan")
+
+print(head(michigan_data))
+```
+
+
+``` {r temp_trend}
+
+michigan_data %>%
+  group_by(year, season) %>%
+  summarize(seasonal_temp = mean(tmean, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = year, y = seasonal_temp, color = season)) +
+  geom_line(linewidth = 1.1) +
+  scale_color_manual(values = c("Fall" = "#AC3E31", 
+                                "Spring" = "#488A99", 
+                                "Summer" = "#DBAE58", 
+                                "Winter" = "#484848")) +
+  labs(title = "Seasonal Mean Temperature in Michigan (1985 - 2024)",
+       x = "Year", y = "Mean Temperature (°C)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+> The plot illustrates Michigan’s seasonal mean temperature trends from 1985 to 2024. As expected, summer consistently records the highest temperatures, averaging around 20°C, while winter remains the coldest, often dipping below freezing. Over time, all four seasons show a gradual warming trend, with spring and winter exhibiting slightly more year-to-year variability. Notably, recent winters appear to be less extreme, suggesting a possible softening of cold conditions, while fall and spring also show upward shifts. This consistent warming across all seasons reflects Michigan’s broader exposure to long-term climate change.
+
+
+``` {r ppt_trend}
+
+michigan_data %>%
+  group_by(year, season) %>%
+  summarize(seasonal_ppt = sum(ppt, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = year, y = seasonal_ppt, color = season)) +
+  geom_line(linewidth = 1.1) +
+  scale_color_manual(values = c("Fall" = "#AC3E31", 
+                                "Spring" = "#488A99", 
+                                "Summer" = "#DBAE58", 
+                                "Winter" = "#484848")) +
+  facet_wrap(~ season, scales = "free_y") +
+  labs(title = "Seasonal Total Precipitation in Michigan (1985 - 2024)",
+       x = "Year", y = "Precipitation (mm)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+> The plot shows Michigan’s seasonal total precipitation trends from 1985 to 2024. Spring and summer exhibit relatively high and increasing precipitation levels, with spring especially showing greater variability in recent decades. Fall, which started with the highest precipitation totals in the late 1980s, shows a declining trend, particularly in the last decade. Winter precipitation remains lower overall but has shown a gradual rise and increased fluctuation, possibly due to warmer winters leading to more rainfall than snow. Overall, the data suggests a seasonal shift in rainfall patterns, with spring and summer becoming wetter, and fall trending drier over time.
+
+``` {r vpd_trend}
+
+michigan_data %>%
+  group_by(region, year, season) %>%
+  summarize(
+    vpd_min = mean(vpdmin, na.rm = TRUE),
+    vpd_max = mean(vpdmax, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(vpd_min, vpd_max), names_to = "VPD_Type", values_to = "Value") %>%
+  ggplot(aes(x = year, y = Value, color = VPD_Type)) +
+  geom_line(size = 1.1) +
+  scale_color_manual(values = c("vpd_max" = "#AC3E31", "vpd_min" = "#484848")) +
+  facet_wrap(~ region + season, scales = "free_y") +
+  labs(title = "Seasonal Mean VPD Trends by Region (1985 - 2024)",
+       x = "Year", y = "Vapor Pressure Deficit (kPa)", color = "VPD Type") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+> The plot illustrates seasonal trends of vapor pressure deficit (VPD) in Michigan from 1985 to 2024, showing both vpdmax (peak daytime dryness) and vpdmin (minimum daily dryness) for each season. Notably, summer shows the highest vpdmax values, often reaching or exceeding 20 kPa, indicating intense atmospheric dryness during this season. This can contribute to increased water stress for vegetation, especially under rising temperatures. Spring and fall exhibit a gradual upward trend in vpdmax, suggesting that these transitional seasons are becoming increasingly dry during the day, which could affect planting, growing, and harvesting cycles. While vpdmin remains relatively stable across all seasons, slight increases are noticeable in winter and spring, hinting at reduced nighttime or morning humidity. Overall, the results indicate that daytime atmospheric dryness is intensifying, particularly outside of summer, pointing toward shifting evaporative demand and potential stress on Michigan’s ecosystems and agricultural systems.
+
+``` {r dewpoint_trend}
+
+michigan_data %>%
+  group_by(year, season) %>%
+  summarize(seasonal_tdmean = sum(tdmean, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = year, y = seasonal_tdmean, color = season)) +
+  geom_line(linewidth = 1.1) +
+  scale_color_manual(values = c("Fall" = "#AC3E31", 
+                                "Spring" = "#488A99", 
+                                "Summer" = "#DBAE58", 
+                                "Winter" = "#484848")) +
+  facet_wrap(~ season, scales = "free_y") +
+  labs(title = "Seasonal Mean Dew Point Temperature in Michigan (1985 - 2024)",
+       x = "Year", y = "Mean Dew Point Temperature (°C)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+> The plot shows that Michigan's seasonal mean dew point temperatures have generally increased from 1985 to 2024, indicating rising atmospheric moisture levels. Summer consistently records the highest dew points, reflecting warm and humid conditions, while winter shows the lowest but gradually increasing values, suggesting milder, less dry winters. Fall and spring also exhibit upward trends, pointing to increasing humidity during transitional seasons. Overall, the trend toward higher dew points year-round suggests growing moisture in Michigan’s climate.
+
+``` {r corplot}
+
+michigan_data %>%
+  select(tmean, ppt, tdmean, vpdmax, vpdmin) %>%
+  cor(use = "complete.obs")
+
+corr_data <- michigan_data %>%
+  select(tmean, ppt, tdmean, vpdmax, vpdmin) %>%
+  drop_na()
+
+# correlation matrix
+corr_matrix <- cor(corr_data, use = "complete.obs")
+
+# Correlation matrix
+corrplot(corr_matrix, method = "color", type = "upper",
+         col = colorRampPalette(c("#484848", "#DADADA", "#AC3E31"))(200),
+         addCoef.col = "black", # show correlation values
+         tl.cex = 1.1, number.cex = 0.9,
+         title = "Correlation Between Climate Variables in Michigan",
+         mar = c(0, 0, 2, 0))
+
+```
+
+>  The correlation plot shows the relationships between key climate variables in Michigan. There is a very strong positive correlation between temperature (tmean) and dew point (tdmean) (r = 0.99), indicating that warmer air tends to hold more moisture. Similarly, tmean and vpdmax (r = 0.95) are also highly correlated, which is expected because higher temperatures increase air dryness. vpdmax and tdmean are also strongly correlated (r = 0.92), showing that even as moisture increases, air's drying potential rises with heat. The correlation between tmean and vpdmin (r = 0.67) suggests that minimum dryness levels are also moderately influenced by temperature. On the other hand, precipitation (ppt) shows only moderate to weak correlations with other variables, especially with vpdmax (r = 0.35) and vpdmin (r = 0.20), reflecting that rainfall is less directly tied to temperature and humidity trends. Overall, the plot emphasizes that temperature is the strongest driver of atmospheric moisture and dryness in Michigan. 
+
+``` {r mean_temp_trend}
+
+michigan_data %>%
+  mutate(period = case_when(
+    year <= 2004 ~ "1985–2004",
+    year > 2004 ~ "2005–2024"
+  )) %>%
+  group_by(period, season) %>%
+  summarize(avg_temp = mean(tmean, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = season, y = avg_temp, fill = period)) +
+  geom_col(position = "dodge") +
+  labs(title = "Seasonal Average Temperature in Michigan: 1985 - 2004 vs. 2005 - 2024",
+       x = "Season", y = "Mean Temperature (°C)") +
+  scale_fill_manual(values = c("1985–2004" = "#AC3E31", "2005–2024" = "#484848")) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+> The bar chart compares seasonal average temperatures in Michigan between the periods 1985–2004 and 2005–2024. Across all seasons, there is a noticeable increase in mean temperatures in the more recent period. Fall and winter show the most significantwarming, with winter temperatures rising closer to 0°C from more extreme sub-zero values, indicating milder winters. Summer remains the warmest season and shows a slight increase, suggesting more consistently hot summers. Spring shows the least change, but still a slight warming. Overall, the plot reflects a clear warming trend across all seasons in Michigan, consistent with broader climate change patterns, especially in cooler months like fall and winter, which are warming faster.
+
+``` {r pct_change}
+
+period_labels <- c("1985–1989", "1990–1994", "1995–1999", "2000–2004",
+                   "2005–2009", "2010–2014", "2015–2019", "2020–2024")
+
+michigan_5yr <- michigan_data %>%
+  select(year, season, tmean, ppt, tdmean, vpdmax) %>%
+  mutate(period = cut(year,
+                      breaks = seq(1985, 2025, by = 5),
+                      right = FALSE,
+                      labels = period_labels),
+         period = factor(period, levels = period_labels, ordered = TRUE),
+    season = factor(season, levels = c("Winter", "Spring", "Summer", "Fall"), ordered = TRUE))
+
+# Calculate seasonal means for each period
+
+michigan_seasonal_summary <- michigan_5yr %>%group_by(period, season) %>%
+  summarize(across(c(tmean, ppt, tdmean, vpdmax), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
+
+# Compute % change within each season over time
+michigan_seasonal_pct_change <- michigan_seasonal_summary %>%
+  group_by(season) %>%
+  mutate(across(c(tmean, ppt, tdmean, vpdmax),
+                ~ (.-lag(.)) / lag(.) * 100,
+                .names = "pct_{.col}")) %>%
+  ungroup() %>%
+  arrange(season, period)
+
+# View result
+print(michigan_seasonal_pct_change)
+
+```
+
+``` {r bar_chart}
+
+# Reshape to long format
+michigan_bar_data <- michigan_seasonal_pct_change %>%
+  select(period, season, starts_with("pct_")) %>%
+  drop_na() %>%
+  pivot_longer(cols = starts_with("pct_"),
+               names_to = "variable",
+               names_prefix = "pct_",
+               values_to = "percent_change") 
+
+# Grouped bar chart
+ggplot(michigan_bar_data, aes(x = period, y = percent_change, fill = season)) +
+  geom_col(position = position_dodge(width = 0.8)) +
+  facet_wrap(~ variable, scales = "free_y") +
+  labs(title = "5-Year % Change in Michigan Climate Variables by Season",
+       x = "Period", y = "% Change", fill = "Season") +
+  scale_fill_manual(values = c("Winter" = "#488A99",
+                               "Spring" = "#484848",
+                               "Summer" = "#DBAE58",
+                               "Fall"   = "#AC3E31")) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+> The percent change analysis of Michigan’s seasonal climate variables from 1990 to 2024 highlights high variability and evolving patterns across both time and seasons. Temperature (tmean) shows fluctuating trends, with some warming in spring and fall in the last decade, but a notable cooling in winter (−29% in 2020–2024), possibly driven by short-term anomalies. Precipitation (ppt) varies considerably - for instance, winter 2005–2009 saw a 40% increase, while fall 2020–2024 dropped by 26%, indicating growing rainfall irregularity. Dew point (tdmean) displays extreme swings, with sharp spikes and drops in spring, possibly pointing to unstable humidity levels or outlier effects. Vapor pressure deficit (vpdmax), representing air dryness, shows alternating trends — with positive changes in warm seasons like summer and fall, suggesting drier conditions despite rising humidity. Overall, the data reflects season-specific climate shifts, where warming, drying, and moisture trends don't follow a uniform pattern but instead reveal complex, non-linear changes across decades.
+
+
+#Let's write Michigan Data to our Data folder for Forecasting in Python
+
+``` {r write_data}
+
+file_path <- "D:/Winter 2025/MIS 5470 PCDA/Final_Project/Data/michigan_data.csv"
+
+# Check if file exists, if not then write
+if (!file.exists(file_path)) {
+  write.csv(michigan_data, file_path, row.names = FALSE)
+  message("✅ File written successfully: ", file_path)
+} else {
+  message("ℹ️ File already exists: ", file_path)
+}
+
+```
